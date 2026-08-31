@@ -90,7 +90,7 @@ async function generateModel(params) {
     await new Promise(resolve => setTimeout(resolve, 50));
 
     try {
-        const { width, length, baseThickness, hexRadius, hexSpacing, pillarRadius, pillarHeight, holeSize } = params;
+        const { width, length, baseThickness, hexRadius, hexSpacing, hexChamfer, pillarRadius, pillarHeight, holeSize } = params;
         const geometries = [];
         const halfW = width / 2;
         const halfL = length / 2;
@@ -120,17 +120,64 @@ async function generateModel(params) {
         baseShape.absarc(-halfW + pr, -halfL + pr, pr, Math.PI, Math.PI * 1.5, false);
 
         // Helper to draw a clockwise hexagon (clockwise = hole)
-        function createHexHole(cx, cy, r) {
+        function createHexHole(cx, cy, r, chamfer) {
             const p = new THREE.Path();
+            const vertices = [];
             for (let i = 0; i < 6; i++) {
                 // Clockwise angle
                 const angle = -i * Math.PI / 3;
-                const x = cx + r * Math.cos(angle);
-                const y = cy + r * Math.sin(angle);
-                if (i === 0) p.moveTo(x, y);
-                else p.lineTo(x, y);
+                vertices.push(new THREE.Vector2(cx + r * Math.cos(angle), cy + r * Math.sin(angle)));
             }
-            p.lineTo(cx + r, cy);
+
+            // Limit chamfer to prevent self-intersection, default to 0 if invalid
+            const safeChamfer = (typeof chamfer === 'number' && !isNaN(chamfer)) ? Math.min(chamfer, r * 0.5) : 0;
+            console.log("Generating hex hole with radius:", r, " safeChamfer:", safeChamfer);
+
+            if (safeChamfer <= 0) {
+                for (let i = 0; i < 6; i++) {
+                    const v = vertices[i];
+                    if (i === 0) p.moveTo(v.x, v.y);
+                    else p.lineTo(v.x, v.y);
+                }
+                p.lineTo(vertices[0].x, vertices[0].y);
+                return p;
+            }
+
+            for (let i = 0; i < 6; i++) {
+                const v = vertices[i];
+                const vPrev = vertices[(i + 5) % 6];
+                const vNext = vertices[(i + 1) % 6];
+
+                const dirPrev = new THREE.Vector2().subVectors(vPrev, v).normalize();
+                const dirNext = new THREE.Vector2().subVectors(vNext, v).normalize();
+
+                const p1 = new THREE.Vector2().copy(v).add(dirPrev.multiplyScalar(safeChamfer));
+                const p2 = new THREE.Vector2().copy(v).add(dirNext.multiplyScalar(safeChamfer));
+
+                if (i === 0) {
+                    p.moveTo(p1.x, p1.y);
+                } else {
+                    p.lineTo(p1.x, p1.y);
+                }
+
+                // Manually draw the fillet to avoid Three.js undersampling small curves into flat chamfers
+                const segments = 6;
+                for (let j = 1; j <= segments; j++) {
+                    const t = j / segments;
+                    const mt = 1 - t;
+                    const curveX = mt * mt * p1.x + 2 * mt * t * v.x + t * t * p2.x;
+                    const curveY = mt * mt * p1.y + 2 * mt * t * v.y + t * t * p2.y;
+                    p.lineTo(curveX, curveY);
+                }
+            }
+
+            const v0 = vertices[0];
+            const v5 = vertices[5];
+            const dirPrev0 = new THREE.Vector2().subVectors(v5, v0).normalize();
+            const p1_0 = new THREE.Vector2().copy(v0).add(dirPrev0.multiplyScalar(safeChamfer));
+            p.lineTo(p1_0.x, p1_0.y);
+            p.closePath();
+            
             return p;
         }
 
@@ -156,7 +203,7 @@ async function generateModel(params) {
                     cy + hexRadiusY < halfL - margin &&
                     cy - hexRadiusY > -halfL + margin
                 ) {
-                    baseShape.holes.push(createHexHole(cx, cy, hexRadius));
+                    baseShape.holes.push(createHexHole(cx, cy, hexRadius, hexChamfer));
                 }
             }
         }
@@ -290,6 +337,7 @@ function getParams() {
         baseThickness: parseFloat(document.getElementById('baseThickness').value),
         hexRadius: parseFloat(document.getElementById('hexRadius').value),
         hexSpacing: parseFloat(document.getElementById('hexSpacing').value),
+        hexChamfer: parseFloat(document.getElementById('hexChamfer').value),
         pillarRadius: parseFloat(document.getElementById('pillarRadius').value),
         pillarHeight: parseFloat(document.getElementById('pillarHeight').value),
         holeSize: parseFloat(document.getElementById('holeSize').value)
