@@ -119,6 +119,29 @@ export function createParametricBaseMesh(params, material) {
         }
     }
 
+    const corners = [
+        [-halfW + pillarRadius, -halfL + pillarRadius],
+        [halfW - pillarRadius, -halfL + pillarRadius],
+        [-halfW + pillarRadius, halfL - pillarRadius],
+        [halfW - pillarRadius, halfL - pillarRadius]
+    ];
+
+    const hs = holeSize / 2;
+    const createSharpSquareHole = (cx, cy) => {
+        const p = new THREE.Path();
+        p.moveTo(cx - hs, cy + hs);
+        p.lineTo(cx + hs, cy + hs);
+        p.lineTo(cx + hs, cy - hs);
+        p.lineTo(cx - hs, cy - hs);
+        p.lineTo(cx - hs, cy + hs);
+        return p;
+    };
+
+    // Add sharp square holes to the base plate corners (goes all the way through)
+    for (const [cx, cy] of corners) {
+        baseShape.holes.push(createSharpSquareHole(cx, cy));
+    }
+
     const baseExtrude = { depth: baseThickness, bevelEnabled: false, curveSegments: 6 };
     const baseGeo = new THREE.ExtrudeGeometry(baseShape, baseExtrude);
     // Rotate so it lays flat on the XZ plane, moving Y from 0 to -depth
@@ -134,23 +157,9 @@ export function createParametricBaseMesh(params, material) {
     pillarShape.absarc(0, 0, pillarRadius, 0, Math.PI * 2, false); // Counter-clockwise outer
 
     // Square hole (clockwise)
-    const holePath = new THREE.Path();
-    const hs = holeSize / 2;
-    holePath.moveTo(-hs, hs);
-    holePath.lineTo(hs, hs);
-    holePath.lineTo(hs, -hs);
-    holePath.lineTo(-hs, -hs);
-    holePath.lineTo(-hs, hs);
-    pillarShape.holes.push(holePath);
+    pillarShape.holes.push(createSharpSquareHole(0, 0));
 
     const pillarExtrude = { depth: pillarHeight, bevelEnabled: false, curveSegments: 32 };
-
-    const corners = [
-        [-halfW + pillarRadius, -halfL + pillarRadius],
-        [halfW - pillarRadius, -halfL + pillarRadius],
-        [-halfW + pillarRadius, halfL - pillarRadius],
-        [halfW - pillarRadius, halfL - pillarRadius]
-    ];
 
     for (const [cx, cy] of corners) {
         const pGeo = new THREE.ExtrudeGeometry(pillarShape, pillarExtrude);
