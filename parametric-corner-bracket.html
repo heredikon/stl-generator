@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parametric Corner Bracket</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Google Fonts for premium typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+
+    <!-- Import Maps for Three.js and plugins -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "three-csg-ts": "https://esm.sh/three-csg-ts@3.1.11?deps=three@0.160.0"
+            }
+        }
+    </script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar Controls -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <a href="index.html" class="back-link">← Back to Home</a>
+                <h1>Parametric Corner Bracket</h1>
+                <p>Adjust parameters to generate your 3D model in real-time.</p>
+            </div>
+
+            <div class="controls-container">
+                <!-- Bracket Dimensions -->
+                <div class="control-group">
+                    <h3>Bracket Dimensions</h3>
+                    <div class="control-row">
+                        <label for="lengthX">Length X (mm)</label>
+                        <input type="number" id="lengthX" value="100" min="20" max="300" step="1">
+                    </div>
+                    <div class="control-row">
+                        <label for="lengthY">Length Y (mm)</label>
+                        <input type="number" id="lengthY" value="100" min="20" max="300" step="1">
+                    </div>
+                    <div class="control-row">
+                        <label for="baseWidth">Base Width (mm)</label>
+                        <input type="number" id="baseWidth" value="30" min="10" max="300" step="1">
+                    </div>
+                    <div class="control-row">
+                        <label for="wallHeight">Wall Height (mm)</label>
+                        <input type="number" id="wallHeight" value="40" min="10" max="300" step="1">
+                    </div>
+                    <div class="control-row">
+                        <label for="thickness">Thickness (mm)</label>
+                        <input type="number" id="thickness" value="4" min="1" max="20" step="0.5">
+                    </div>
+                </div>
+
+                <!-- Honeycomb Pattern -->
+                <div class="control-group">
+                    <h3>Honeycomb Pattern</h3>
+                    <div class="control-row">
+                        <label for="patternPlacement">Pattern Placement</label>
+                        <select id="patternPlacement" style="width: 100%; padding: 5px; margin-top: 5px; background: #222; color: white; border: 1px solid #444; border-radius: 4px;">
+                            <option value="both">Base & Walls</option>
+                            <option value="base">Base Only</option>
+                            <option value="walls">Walls Only</option>
+                            <option value="none">None</option>
+                        </select>
+                    </div>
+                    <div class="control-row">
+                        <label for="hexRadius">Hexagon Radius (mm)</label>
+                        <input type="number" id="hexRadius" value="8" min="2" max="30" step="0.5">
+                    </div>
+                    <div class="control-row">
+                        <label for="hexSpacing">Wall Thickness (mm)</label>
+                        <input type="number" id="hexSpacing" value="2" min="0.5" max="10" step="0.5">
+                    </div>
+                    <div class="control-row">
+                        <label for="hexChamfer">Hexagon Chamfer (mm)</label>
+                        <input type="number" id="hexChamfer" value="1" min="0" max="10" step="0.1">
+                    </div>
+                </div>
+
+
+            </div>
+
+            <div class="actions">
+                <button id="btn-generate" class="btn primary">Generate Model</button>
+                <button id="btn-download" class="btn secondary">Download STL</button>
+            </div>
+        </aside>
+
+        <!-- 3D Viewer Area -->
+        <main class="viewer-area">
+            <div id="loading" class="loading-overlay">
+                <div class="spinner"></div>
+                <p>Generating Geometry...</p>
+            </div>
+            <div id="canvas-container"></div>
+        </main>
+    </div>
+
+    <!-- Application Logic -->
+    <script type="module" src="js/corner-bracket.js"></script>
+</body>
+
+</html>
