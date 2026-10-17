@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createParametricBaseMesh, createParametricLBracketMesh, createParametricStraightBracketMesh, createParametricCornerBracketMesh } from './geometry.js';
+import { createParametricBaseMesh, createParametricLBracketMesh, createParametricStraightBracketMesh, createParametricCornerBracketMesh, createParametricPlantSupportMesh } from './geometry.js';
 
 function initPreview(containerId, meshGenerator, defaultParams) {
     const container = document.getElementById(containerId);
@@ -120,4 +120,17 @@ initPreview('preview-canvas-4', createParametricCornerBracketMesh, {
     hexRadius: 8,
     hexSpacing: 2,
     hexChamfer: 1
+});
+
+// 5. Plant Support Stand
+initPreview('preview-canvas-5', createParametricPlantSupportMesh, {
+    innerDiameter: 90,
+    ringWidth: 14,
+    ringHeight: 6,
+    openingAngle: 45,
+    stakeHeight: 120,
+    slotSize: 7,
+    tipLength: 22,
+    snapAllowance: 0.6,
+    fitClearance: 0.2
 });

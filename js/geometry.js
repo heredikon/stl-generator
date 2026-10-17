@@ -521,3 +521,248 @@ export function createParametricCornerBracketMesh(params, material) {
     mesh.receiveShadow = true;
     return mesh;
 }
+
+export function createParametricPlantSupportMesh(params, material) {
+    const {
+        innerDiameter = 90,
+        ringWidth = 14,
+        ringHeight = 6,
+        openingAngle = 45,
+        stakeHeight = 120,
+        slotSize = 7,
+        tipLength = 22,
+        snapAllowance = 0.6,
+        fitClearance = 0.2
+    } = params;
+
+    const geometries = [];
+
+    // ==========================================
+    // 1. C-RING WITH 3 RECTANGULAR STAKE SLOTS
+    // ==========================================
+    const rIn = Math.max(10, innerDiameter / 2);
+    const bandWidth = Math.max(4, ringWidth);
+    const rOut = rIn + bandWidth;
+    const rMid = rIn + bandWidth / 2;
+    const rCap = bandWidth / 2;
+
+    const clampedOpeningDeg = Math.min(Math.max(openingAngle, 10), 160);
+    const alpha = (clampedOpeningDeg * Math.PI) / 180;
+
+    // Place opening at bottom-right (-45 deg) to match the drawing
+    const gapCenterAngle = -Math.PI / 4;
+    const startAngle = gapCenterAngle + alpha / 2;
+    const endAngle = gapCenterAngle + Math.PI * 2 - alpha / 2;
+
+    const ringShape = new THREE.Shape();
+
+    // Start at outer arc start
+    ringShape.absarc(0, 0, rOut, startAngle, endAngle, false);
+
+    // Rounded semicircular cap at endAngle
+    const endCapCx = rMid * Math.cos(endAngle);
+    const endCapCy = rMid * Math.sin(endAngle);
+    ringShape.absarc(endCapCx, endCapCy, rCap, endAngle, endAngle + Math.PI, false);
+
+    // Inner arc back from endAngle to startAngle (clockwise)
+    ringShape.absarc(0, 0, rIn, endAngle, startAngle, true);
+
+    // Rounded semicircular cap at startAngle
+    const startCapCx = rMid * Math.cos(startAngle);
+    const startCapCy = rMid * Math.sin(startAngle);
+    ringShape.absarc(startCapCx, startCapCy, rCap, startAngle - Math.PI, startAngle, false);
+    ringShape.closePath();
+
+    // 3 square slots spaced evenly around the ring
+    const squareHoleSize = Math.max(3, Math.min(slotSize, bandWidth - 2));
+    const holeTangential = squareHoleSize;
+    const holeRadial = squareHoleSize;
+    const halfT = holeTangential / 2;
+    const halfR = holeRadial / 2;
+
+    // Distribute 3 slots along the active arc
+    const arcSpan = endAngle - startAngle;
+    const slotAngles = [
+        startAngle + arcSpan * (1 / 6),
+        startAngle + arcSpan * (3 / 6),
+        startAngle + arcSpan * (5 / 6)
+    ];
+
+    for (const theta of slotAngles) {
+        const urX = Math.cos(theta);
+        const urY = Math.sin(theta);
+        const utX = -Math.sin(theta);
+        const utY = Math.cos(theta);
+
+        const cx = rMid * urX;
+        const cy = rMid * urY;
+
+        // Clockwise path for hole
+        const p1x = cx - halfR * urX + halfT * utX;
+        const p1y = cy - halfR * urY + halfT * utY;
+        const p2x = cx + halfR * urX + halfT * utX;
+        const p2y = cy + halfR * urY + halfT * utY;
+        const p3x = cx + halfR * urX - halfT * utX;
+        const p3y = cy + halfR * urY - halfT * utY;
+        const p4x = cx - halfR * urX - halfT * utX;
+        const p4y = cy - halfR * urY - halfT * utY;
+
+        const holePath = new THREE.Path();
+        holePath.moveTo(p1x, p1y);
+        holePath.lineTo(p2x, p2y);
+        holePath.lineTo(p3x, p3y);
+        holePath.lineTo(p4x, p4y);
+        holePath.lineTo(p1x, p1y);
+        ringShape.holes.push(holePath);
+    }
+
+    const rHeight = Math.max(2, ringHeight);
+    const ringExtrude = {
+        depth: rHeight,
+        bevelEnabled: false,
+        curveSegments: 64
+    };
+    const ringGeo = new THREE.ExtrudeGeometry(ringShape, ringExtrude);
+    ringGeo.deleteAttribute('uv');
+    // Rotate so ring lies flat on XZ plane, Y in [0, rHeight]
+    ringGeo.rotateX(Math.PI / 2);
+    ringGeo.translate(0, rHeight, 0);
+    ringGeo.computeVertexNormals();
+    geometries.push(ringGeo);
+
+    // Standalone centered Ring mesh for individual STL export
+    const ringExportGeo = ringGeo.clone();
+    const ringMesh = new THREE.Mesh(ringExportGeo, material);
+
+    // ==========================================
+    // 2. THREE CLICK-FIT STAKES (FLAT ON BED)
+    // ==========================================
+    // Anatomy of the Click-Fit Stake (along Y in 2D shape -> Z in 3D):
+    // - Top Snap Head with lead-in taper, outward snap ridge, and central flex relief slot
+    // - Locking Groove (Neck) matching ringHeight (rh) + clearance
+    // - Support Shoulder Collar that stops the ring from sliding down
+    // - Uniform straight shaft + pointed spike tip at the bottom
+    const totalH = Math.max(40, stakeHeight);
+    const clearance = Math.min(Math.max(0.05, fitClearance), 0.8);
+    const bump = Math.min(Math.max(0.2, snapAllowance), 2.0);
+
+    const stakeThickness = Math.max(2.0, holeRadial - clearance);
+    const shaftW = holeTangential;
+    const neckW = Math.max(2.2, holeTangential - clearance);
+    const snapHeadBaseW = neckW + 2 * bump;
+    const snapTipW = Math.max(1.8, neckW - 0.8);
+    const collarW = holeTangential + 3.2;
+
+    const headRampLen = 4.0;
+    const headRetainBevel = 0.8;
+    const neckLen = rHeight + Math.max(0.2, clearance);
+    const collarLen = 3.0;
+    const collarChamfer = 1.6;
+    const spikeLen = Math.min(Math.max(8, tipLength), totalH * 0.4);
+
+    // Relief slot in the center of the snap head so prongs flex inward and click
+    const slotW = Math.min(Math.max(1.2, neckW * 0.26), neckW - 1.6);
+    const slotDepth = headRampLen + headRetainBevel + neckLen + 1.5;
+
+    function createSingleStakeGeometry() {
+        // Draw in 2D (x = width, y = length along stake from +totalH/2 top to -totalH/2 tip)
+        // After rotateX(Math.PI / 2), y becomes +Z (so top is at -Z, tip is at +Z)
+        const yTop = totalH / 2;
+        const yRidge = yTop - headRampLen;
+        const yNeckTop = yRidge - headRetainBevel;
+        const yNeckBot = yNeckTop - neckLen;
+        const yCollarBot = yNeckBot - collarLen;
+        const yShaftTop = yCollarBot - collarChamfer;
+        const ySpikeStart = -totalH / 2 + spikeLen;
+        const yTip = -totalH / 2;
+
+        const ySlotBottom = yTop - slotDepth;
+        const halfSlot = slotW / 2;
+
+        const s = new THREE.Shape();
+
+        // Start at bottom pointed spike tip (0, yTip) and trace counter-clockwise:
+        // Right side (bottom -> top)
+        s.moveTo(0, yTip);
+        s.lineTo(shaftW / 2, ySpikeStart);
+        s.lineTo(shaftW / 2, yShaftTop);
+        s.lineTo(collarW / 2, yCollarBot);
+        s.lineTo(collarW / 2, yNeckBot);
+        s.lineTo(neckW / 2, yNeckBot);
+        s.lineTo(neckW / 2, yNeckTop);
+        s.lineTo(snapHeadBaseW / 2, yRidge);
+        s.lineTo(snapTipW / 2, yTop);
+
+        // Top right prong tip -> down into center flex relief slot
+        s.lineTo(halfSlot, yTop);
+        s.lineTo(halfSlot, ySlotBottom + halfSlot);
+        // Semicircular stress-relief arc at bottom of flex slot (clockwise from 0 to -PI)
+        s.absarc(0, ySlotBottom + halfSlot, halfSlot, 0, Math.PI, true);
+        s.lineTo(-halfSlot, yTop);
+
+        // Left side (top -> bottom)
+        s.lineTo(-snapTipW / 2, yTop);
+        s.lineTo(-snapHeadBaseW / 2, yRidge);
+        s.lineTo(-neckW / 2, yNeckTop);
+        s.lineTo(-neckW / 2, yNeckBot);
+        s.lineTo(-collarW / 2, yNeckBot);
+        s.lineTo(-collarW / 2, yCollarBot);
+        s.lineTo(-shaftW / 2, yShaftTop);
+        s.lineTo(-shaftW / 2, ySpikeStart);
+        s.lineTo(0, yTip);
+        s.closePath();
+
+        const stakeGeo = new THREE.ExtrudeGeometry(s, {
+            depth: stakeThickness,
+            bevelEnabled: false,
+            curveSegments: 16
+        });
+        stakeGeo.deleteAttribute('uv');
+        // Rotate so stake lies flat on XZ build plate, Y in [0, stakeThickness]
+        stakeGeo.rotateX(Math.PI / 2);
+        stakeGeo.translate(0, stakeThickness, 0);
+        stakeGeo.computeVertexNormals();
+        return stakeGeo;
+    }
+
+    const stakeSpacing = collarW + 10;
+    const firstStakeX = rOut + 18 + collarW / 2;
+    const stakeExportGeometries = [];
+
+    for (let i = 0; i < 3; i++) {
+        const stakeGeo = createSingleStakeGeometry();
+        stakeGeo.translate(firstStakeX + i * stakeSpacing, 0, 0);
+        geometries.push(stakeGeo);
+
+        // Centered stakes for individual STL export (-stakeSpacing, 0, +stakeSpacing)
+        const centeredStakeGeo = createSingleStakeGeometry();
+        centeredStakeGeo.translate((i - 1) * stakeSpacing, 0, 0);
+        stakeExportGeometries.push(centeredStakeGeo);
+    }
+
+    const stakesExportGeo = BufferGeometryUtils.mergeGeometries(stakeExportGeometries);
+    stakesExportGeo.computeVertexNormals();
+    const stakesMesh = new THREE.Mesh(stakesExportGeo, material);
+
+    // Single centered stake for individual STL export
+    const singleStakeGeo = createSingleStakeGeometry();
+    const singleStakeMesh = new THREE.Mesh(singleStakeGeo, material);
+
+    // ==========================================
+    // 3. MERGE & CENTER ON BUILD PLATE
+    // ==========================================
+    const mergedGeo = BufferGeometryUtils.mergeGeometries(geometries);
+    mergedGeo.computeVertexNormals();
+
+    // Center the combined layout along X so ring + 3 stakes sit balanced at the origin
+    const minX = -rOut;
+    const maxX = firstStakeX + 2 * stakeSpacing + collarW / 2;
+    const centerX = (minX + maxX) / 2;
+    mergedGeo.translate(-centerX, 0, 0);
+
+    const mesh = new THREE.Mesh(mergedGeo, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData = { ringMesh, stakesMesh, singleStakeMesh };
+    return mesh;
+}
